@@ -47,7 +47,12 @@ export function integrationStatus() {
   return {
     shopify: {
       shop: process.env.SHOPIFY_SHOP_DOMAIN || "",
-      webhookSecret: Boolean(process.env.SHOPIFY_WEBHOOK_SECRET?.trim()),
+      apiKey: Boolean(process.env.SHOPIFY_API_KEY?.trim()),
+      apiSecret: Boolean(process.env.SHOPIFY_API_SECRET?.trim()),
+      webhookSecret: Boolean(
+        process.env.SHOPIFY_WEBHOOK_SECRET?.trim() ||
+          process.env.SHOPIFY_API_SECRET?.trim(),
+      ),
     },
     sesami: {
       webhookSecret: Boolean(process.env.SESAMI_WEBHOOK_SECRET?.trim()),
