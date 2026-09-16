@@ -1,0 +1,216 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Sex {
+  MALE
+  FEMALE
+  UNKNOWN
+}
+
+enum VisitType {
+  INTAKE
+  REHAB
+  NOTE
+}
+
+enum Progress {
+  BETTER
+  STABLE
+  WORSE
+  UNRATED
+}
+
+enum ReportStatus {
+  DRAFT
+  SENT
+}
+
+enum EmailProvider {
+  RESEND
+  MOCK
+}
+
+enum BookingSource {
+  SESAMI
+  SHOPIFY
+  MANUAL
+}
+
+enum WebhookSource {
+  SHOPIFY
+  SESAMI
+}
+
+/// Dog owner / customer. May later match a Shopify customer.
+model Owner {
+  id                String   @id @default(cuid())
+  name              String
+  kennitala         String?
+  email             String?
+  phone             String
+  address           String?
+  postalCode        String?
+  city              String?
+  notes             String?  @db.Text
+  shopifyCustomerId String?  @unique
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  dogs     Dog[]
+  bookings Booking[]
+
+  @@index([email])
+  @@index([phone])
+  @@map("owners")
+}
+
+/// Patient — the dog in physiotherapy.
+model Dog {
+  id           String    @id @default(cuid())
+  ownerId      String
+  owner        Owner     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name         String
+  breed        String
+  sex          Sex       @default(UNKNOWN)
+  birthDate    DateTime?
+  weightKg     Float?
+  color        String?
+  chipNumber   String?
+  insurance    String?
+  vetName      String?
+  vetPhone     String?
+  activity     String?
+  diagnoses    String?   @db.Text
+  medications  String?   @db.Text
+  allergies    String?   @db.Text
+  notes        String?   @db.Text
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  visits   Visit[]
+  reports  MedicalReport[]
+  bookings Booking[]
+
+  @@index([ownerId])
+  @@index([name])
+  @@map("dogs")
+}
+
+/// Journal entry: first-visit intake, rehab hour, or free note.
+model Visit {
+  id                    String    @id @default(cuid())
+  dogId                 String
+  dog                   Dog       @relation(fields: [dogId], references: [id], onDelete: Cascade)
+  bookingId             String?   @unique
+  booking               Booking?  @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  type                  VisitType
+  occurredAt            DateTime
+  durationMinutes       Int?
+  findings              String?   @db.Text
+  assessment            String?   @db.Text
+  treatmentNotes        String?   @db.Text
+  homeRecommendations   String?   @db.Text
+  nextVisitNotes        String?   @db.Text
+  progress              Progress  @default(UNRATED)
+  treatments            Json?
+  intake                Json?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  reports MedicalReport[]
+
+  @@index([dogId, occurredAt])
+  @@map("visits")
+}
+
+/// Sjúkraskýrsla filled from a template after the first session.
+model MedicalReport {
+  id           String       @id @default(cuid())
+  dogId        String
+  dog          Dog          @relation(fields: [dogId], references: [id], onDelete: Cascade)
+  visitId      String?
+  visit        Visit?       @relation(fields: [visitId], references: [id], onDelete: SetNull)
+  status       ReportStatus @default(DRAFT)
+  fields       Json
+  extraNotes   String?      @db.Text
+  sentAt       DateTime?
+  sentToEmail  String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  emails EmailLog[]
+
+  @@index([dogId])
+  @@map("medical_reports")
+}
+
+model EmailLog {
+  id         String        @id @default(cuid())
+  reportId   String?
+  report     MedicalReport? @relation(fields: [reportId], references: [id], onDelete: SetNull)
+  to         String
+  subject    String
+  body       String        @db.Text
+  html       String?       @db.Text
+  provider   EmailProvider
+  providerId String?
+  createdAt  DateTime      @default(now())
+
+  @@index([reportId])
+  @@map("email_logs")
+}
+
+/// Booking synced from Sesami (Shopify) or created in the clinic.
+model Booking {
+  id                 String        @id @default(cuid())
+  sesamiBookingId    String?       @unique
+  shopifyCustomerId  String?
+  ownerId            String?
+  owner              Owner?        @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  dogId              String?
+  dog                Dog?          @relation(fields: [dogId], references: [id], onDelete: SetNull)
+  customerName       String
+  customerEmail      String?
+  customerPhone      String?
+  serviceId          String?
+  serviceName        String
+  resourceId         String?
+  resourceName       String?
+  startsAt           DateTime
+  endsAt             DateTime
+  timeZone           String?       @default("Atlantic/Reykjavik")
+  status             String
+  notes              String?       @db.Text
+  tags               String?
+  source             BookingSource @default(SESAMI)
+  rawPayload         Json?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  visit Visit?
+
+  @@index([startsAt])
+  @@index([status])
+  @@index([ownerId])
+  @@map("bookings")
+}
+
+model WebhookEvent {
+  id          String        @id @default(cuid())
+  source      WebhookSource
+  topic       String
+  shopDomain  String?
+  payload     Json
+  hmacValid   Boolean
+  processed   Boolean       @default(false)
+  error       String?
+  createdAt   DateTime      @default(now())
+
+  @@index([source, createdAt])
+  @@map("webhook_events")
+}
